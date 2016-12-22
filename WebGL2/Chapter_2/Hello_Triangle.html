@@ -1,0 +1,201 @@
+<!--
+// The MIT License (MIT)
+//
+// Copyright (c) 2013 Dan Ginsburg, Budirijanto Purnomo
+// Copyright (c) 2016 Morten Nobel-Jørgensen (WebGL port)
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+-->
+
+<html>
+<head>
+    <title>Hello Triangle</title>
+</head>
+<body>
+<!--
+Created by Morten Nobel-Jørgensen
+
+Changes compared to Hello_Triangle.c:
+ - The ESContext corresponds to the gl context.
+ - The gl context was made global instead of passing it around.
+ - Used gl.drawingBufferWidth and gl.drawingBufferHeight
+ - An array buffer was used for rendering (required by WebGL)
+ - requestAnimationFrame was used instead of esRegisterDrawFunc
+ - no esRegisterShutdownFunc was created
+
+-->
+<canvas width="320" height="240" id="webgl_canvas"></canvas>
+<script>
+    "use strict";
+
+    var gl;
+
+    function loadShader(shaderType, shaderSrc )
+    {
+        var shader;
+        var compiled;
+
+        // Create the shader object
+        shader = gl.createShader ( shaderType );
+
+        if ( shader == 0 )
+        {
+            return 0;
+        }
+
+        // Load the shader source
+        gl.shaderSource ( shader,  shaderSrc );
+
+        // Compile the shader
+        gl.compileShader ( shader );
+
+        // Check the compile status
+        compiled = gl.getShaderParameter ( shader, gl.COMPILE_STATUS );
+
+        if ( !compiled )
+        {
+            var infoLog = gl.getShaderInfoLog ( shader);
+            alert(infoLog);
+
+            gl.deleteShader ( shader );
+            return 0;
+        }
+
+        return shader;
+    }
+
+    function init(){
+        var userData = gl.userData;
+        var vShaderStr =
+            "#version 300 es                          \n"+
+            "layout(location = 0) in vec4 vPosition;  \n"+
+            "void main()                              \n"+
+            "{                                        \n"+
+            "   gl_Position = vPosition;              \n"+
+            "}                                        \n";
+
+        var fShaderStr =
+            "#version 300 es                              \n"+
+            "precision mediump float;                     \n"+
+            "out vec4 fragColor;                          \n"+
+            "void main()                                  \n"+
+            "{                                            \n"+
+            "   fragColor = vec4 ( 1.0, 0.0, 0.0, 1.0 );  \n"+
+            "}                                            \n";
+
+        var vertexShader;
+        var fragmentShader;
+        var programObject;
+        var linked;
+
+        // Load the vertex/fragment shaders
+        vertexShader = loadShader ( gl.VERTEX_SHADER, vShaderStr );
+        fragmentShader = loadShader ( gl.FRAGMENT_SHADER, fShaderStr );
+
+        // Create the program object
+        programObject = gl.createProgram ( );
+
+        if ( programObject == 0 )
+        {
+            return 0;
+        }
+
+        gl.attachShader ( programObject, vertexShader );
+        gl.attachShader ( programObject, fragmentShader );
+
+        // Link the program
+        gl.linkProgram ( programObject );
+
+        // Check the link status
+        linked  = gl.getProgramParameter ( programObject, gl.LINK_STATUS);
+
+        if ( !linked )
+        {
+
+            var infoLog = gl.getProgramInfoLog ( programObject );
+
+            alert(infoLog);
+
+            gl.deleteProgram ( programObject );
+            return false;
+        }
+
+        // Store the program object
+        userData.programObject = programObject;
+
+        var arrayBuffer;
+        arrayBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, arrayBuffer);
+
+        var vVertices = new Float32Array([  0.0,  0.5, 0.0,
+            -0.5, -0.5, 0.0,
+            0.5, -0.5, 0.0
+        ]);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vVertices), gl.STATIC_DRAW);
+
+        // Store the program object
+        userData.arrayBuffer = arrayBuffer;
+
+        gl.clearColor ( 1.0, 1.0, 1.0, 0.0 );
+        return true;
+    }
+
+    function draw() {
+        var userData = gl.userData;
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, userData.arrayBuffer);
+
+        // Set the viewport
+        gl.viewport ( 0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight );
+
+        // Clear the color buffer
+        gl.clear ( gl.COLOR_BUFFER_BIT );
+
+        // Use the program object
+        gl.useProgram ( userData.programObject );
+
+        // Load the vertex data
+        gl.vertexAttribPointer ( 0, 3, gl.FLOAT, gl.FALSE, 0, 0 );
+        gl.enableVertexAttribArray ( 0 );
+
+        gl.drawArrays ( gl.TRIANGLES, 0, 3 );
+        window.requestAnimationFrame(draw);
+    }
+
+    function esMain(){
+        // Create 'window'
+        var canvas = document.getElementById('webgl_canvas');
+        // Try creating a WebGL 2 context first
+        gl = canvas.getContext( 'webgl2', { antialias: false } );
+        if (!gl) {
+            gl = canvas.getContext( 'experimental-webgl2', { antialias: false } );
+        }
+
+        gl.userData = {};
+
+        if ( !init ( ) )
+        {
+            return;
+        }
+        window.requestAnimationFrame(draw);
+    }
+    window.onload = esMain;
+</script>
+</body>
+</html>
