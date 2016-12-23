@@ -1,0 +1,479 @@
+<!--
+// The MIT License (MIT)
+//
+// Copyright (c) 2013 Dan Ginsburg, Budirijanto Purnomo
+// Copyright (c) 2016 Morten Nobel-Jørgensen (WebGL port)
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+-->
+
+<html>
+<head>
+    <title>Instancing</title>
+</head>
+<body>
+<!--
+Created by Morten Nobel-Jørgensen
+
+Changes compared to Instancing.c:
+ - Using glMatrix library
+ - Changed order of matrix multiplication (due to glMatrix)
+ - matrixBuf is updated using gl.bufferData instead of glMapBufferRange (which is not supported in WebGL2)
+-->
+<canvas width="640" height="480" id="webgl_canvas"></canvas>
+<script src="gl-matrix.js"></script>
+<script>
+    "use strict";
+
+    // context {programObject:x, vboIds:[vbo1,vbo2,vbo3]}
+    var gl;
+    var NUM_INSTANCES =   100;
+    var POSITION_LOC =   0;
+    var COLOR_LOC =      1;
+    var MVP_LOC =        2;
+
+    function loadShader(shaderType, shaderSrc )
+    {
+        var shader;
+        var compiled;
+
+        // Create the shader object
+        shader = gl.createShader ( shaderType );
+
+        if ( shader == 0 )
+        {
+            return 0;
+        }
+
+        // Load the shader source
+        gl.shaderSource ( shader,  shaderSrc );
+
+        // Compile the shader
+        gl.compileShader ( shader );
+
+        // Check the compile status
+        compiled = gl.getShaderParameter ( shader, gl.COMPILE_STATUS );
+
+        if ( !compiled )
+        {
+            var infoLog = gl.getShaderInfoLog ( shader);
+            alert(infoLog);
+
+            gl.deleteShader ( shader );
+            return 0;
+        }
+
+        return shader;
+    }
+
+    function esGenCube(scale, vertices, normals, texCoords, indices ){
+        var i;
+        var numVertices = 24;
+        var numIndices = 36;
+
+        var cubeVerts =
+            [
+            -0.5, -0.5, -0.5,
+            -0.5, -0.5,  0.5,
+            0.5, -0.5,  0.5,
+            0.5, -0.5, -0.5,
+            -0.5,  0.5, -0.5,
+            -0.5,  0.5,  0.5,
+            0.5,  0.5,  0.5,
+            0.5,  0.5, -0.5,
+            -0.5, -0.5, -0.5,
+            -0.5,  0.5, -0.5,
+            0.5,  0.5, -0.5,
+            0.5, -0.5, -0.5,
+            -0.5, -0.5, 0.5,
+            -0.5,  0.5, 0.5,
+            0.5,  0.5, 0.5,
+            0.5, -0.5, 0.5,
+            -0.5, -0.5, -0.5,
+            -0.5, -0.5,  0.5,
+            -0.5,  0.5,  0.5,
+            -0.5,  0.5, -0.5,
+            0.5, -0.5, -0.5,
+            0.5, -0.5,  0.5,
+            0.5,  0.5,  0.5,
+            0.5,  0.5, -0.5,
+            ];
+
+        var cubeNormals =
+            [
+            0.0, -1.0, 0.0,
+            0.0, -1.0, 0.0,
+            0.0, -1.0, 0.0,
+            0.0, -1.0, 0.0,
+            0.0, 1.0, 0.0,
+            0.0, 1.0, 0.0,
+            0.0, 1.0, 0.0,
+            0.0, 1.0, 0.0,
+            0.0, 0.0, -1.0,
+            0.0, 0.0, -1.0,
+            0.0, 0.0, -1.0,
+            0.0, 0.0, -1.0,
+            0.0, 0.0, 1.0,
+            0.0, 0.0, 1.0,
+            0.0, 0.0, 1.0,
+            0.0, 0.0, 1.0,
+            -1.0, 0.0, 0.0,
+            -1.0, 0.0, 0.0,
+            -1.0, 0.0, 0.0,
+            -1.0, 0.0, 0.0,
+            1.0, 0.0, 0.0,
+            1.0, 0.0, 0.0,
+            1.0, 0.0, 0.0,
+            1.0, 0.0, 0.0
+            ];
+
+        var cubeTex =
+            [
+                0.0, 0.0,
+                0.0, 1.0,
+                1.0, 1.0,
+                1.0, 0.0,
+                1.0, 0.0,
+                1.0, 1.0,
+                0.0, 1.0,
+                0.0, 0.0,
+                0.0, 0.0,
+                0.0, 1.0,
+                1.0, 1.0,
+                1.0, 0.0,
+                0.0, 0.0,
+                0.0, 1.0,
+                1.0, 1.0,
+                1.0, 0.0,
+                0.0, 0.0,
+                0.0, 1.0,
+                1.0, 1.0,
+                1.0, 0.0,
+                0.0, 0.0,
+                0.0, 1.0,
+                1.0, 1.0,
+                1.0, 0.0
+            ];
+
+        // Allocate memory for buffers
+        if ( vertices != null )
+        {
+            vertices.length = 3 * numVertices;
+            for (var i = 0; i < numVertices * 3; i++ )
+            {
+                vertices[i] = cubeVerts[i] * scale;
+            }
+        }
+
+        if ( normals != null )
+        {
+            normals.length = 3 * numVertices;
+            for (var i = 0; i < numVertices * 3; i++ )
+            {
+                normals[i] = cubeNormals[i];
+            }
+        }
+
+        if ( texCoords != null )
+        {
+            texCoords.length = 2 * numVertices;
+            for (var i = 0; i < numVertices * 2; i++ )
+            {
+                texCoords[i] = cubeTex[i];
+            }
+        }
+
+
+        // Generate the indices
+        if ( indices != null )
+        {
+            var cubeIndices =
+            [
+                0, 2, 1,
+                0, 3, 2,
+                4, 5, 6,
+                4, 6, 7,
+                8, 9, 10,
+                8, 10, 11,
+                12, 15, 14,
+                12, 14, 13,
+                16, 17, 18,
+                16, 18, 19,
+                20, 23, 22,
+                20, 22, 21
+            ];
+
+            indices.length = numIndices;
+            for (var i=0;i<numIndices;i++){
+                indices[i] = cubeIndices[i];
+            }
+        }
+
+        return numIndices;
+    }
+
+    function init(){
+
+        gl.enable(gl.DEPTH_TEST);
+
+        var positions = [];
+        var indices = [];
+        var userData = gl.userData;
+        var vShaderStr =
+            "#version 300 es                             \n"+
+            "layout(location = 0) in vec4 a_position;    \n"+
+            "layout(location = 1) in vec4 a_color;       \n"+
+            "layout(location = 2) in mat4 a_mvpMatrix;   \n"+
+            "out vec4 v_color;                           \n"+
+            "void main()                                 \n"+
+            "{                                           \n"+
+            "   v_color = a_color;                       \n"+
+            "   gl_Position = a_mvpMatrix * a_position;  \n"+
+            "}                                           \n";
+
+        var fShaderStr =
+            "#version 300 es                                \n"+
+            "precision mediump float;                       \n"+
+            "in vec4 v_color;                               \n"+
+            "layout(location = 0) out vec4 outColor;        \n"+
+            "void main()                                    \n"+
+            "{                                              \n"+
+            "  outColor = v_color;                          \n"+
+            "}                                              \n";
+
+        var programObject;
+
+        var vertexShader;
+        var fragmentShader;
+        var linked;
+
+        // Load the vertex/fragment shaders
+        vertexShader = loadShader ( gl.VERTEX_SHADER, vShaderStr );
+        fragmentShader = loadShader ( gl.FRAGMENT_SHADER, fShaderStr );
+
+        // Create the program object
+        programObject = gl.createProgram ( );
+
+        if ( programObject == 0 )
+        {
+            return 0;
+        }
+
+
+        gl.attachShader ( programObject, vertexShader );
+        gl.attachShader ( programObject, fragmentShader );
+
+        // Link the program
+        gl.linkProgram ( programObject );
+
+        // Check the link status
+        linked  = gl.getProgramParameter ( programObject, gl.LINK_STATUS);
+
+        if ( !linked )
+        {
+
+            var infoLog = gl.getProgramInfoLog ( programObject );
+
+            alert(infoLog);
+
+            gl.deleteProgram ( programObject );
+            return false;
+        }
+
+        // Store the program object
+        userData.programObject = programObject;
+
+        // Generate the vertex data
+        userData.numIndices = esGenCube ( 0.1, positions,
+            null, null, indices );
+
+        // Index buffer object
+        userData.indicesIBO = gl.createBuffer();
+        gl.bindBuffer ( gl.ELEMENT_ARRAY_BUFFER, userData.indicesIBO );
+        gl.bufferData ( gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW );
+        gl.bindBuffer ( gl.ELEMENT_ARRAY_BUFFER, null );
+
+        // Position VBO for cube model
+        userData.positionVBO = gl.createBuffer();
+        gl.bindBuffer ( gl.ARRAY_BUFFER, userData.positionVBO );
+        gl.bufferData ( gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW );
+
+        // Random color for each instance
+        {
+            var colors = new Float32Array(NUM_INSTANCES * 4);
+
+            for (var instance = 0; instance < NUM_INSTANCES; instance++ )
+            {
+                var icolors = colors.subarray(instance*4);
+                icolors[0] = Math.random();
+                icolors[1] = Math.random();
+                icolors[2] = Math.random();
+                icolors[3] = 1;
+            }
+
+            userData.colorVBO = gl.createBuffer ();
+            gl.bindBuffer ( gl.ARRAY_BUFFER, userData.colorVBO );
+            gl.bufferData ( gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW );
+        }
+
+        // Allocate storage to store MVP per instance
+        {
+            userData.angle = [];
+            // Random angle for each instance, compute the MVP later
+            for (var instance = 0; instance < NUM_INSTANCES; instance++ )
+            {
+                userData.angle[instance] = Math.random() * 360.0;
+            }
+
+            userData.mvpVBO = gl.createBuffer();
+            gl.bindBuffer ( gl.ARRAY_BUFFER, userData.mvpVBO );
+            userData.matrixBuf = new Float32Array(16*NUM_INSTANCES);
+            gl.bufferData ( gl.ARRAY_BUFFER, userData.matrixBuf, gl.DYNAMIC_DRAW );
+        }
+        gl.bindBuffer ( gl.ARRAY_BUFFER, null );
+
+        gl.clearColor ( 0.99, 0.99, 0.99, 1.0 );
+        return true;
+    }
+
+    function update() {
+        var deltaTime = 0.016;
+        var userData = gl.userData;
+        var    aspect;
+        var      numRows;
+        var      numColumns;
+
+
+        // Compute the window aspect ratio
+        aspect = gl.drawingBufferWidth / gl.drawingBufferHeight;
+
+        // Generate a perspective matrix with a 60 degree FOV
+        var perspective = mat4.create();
+        mat4.perspective(perspective, glMatrix.toRadian(60), aspect, 1, 20);
+
+        gl.bindBuffer ( gl.ARRAY_BUFFER, userData.mvpVBO );
+
+        // Compute a per-instance MVP that translates and rotates each instance differnetly
+        numRows = Math.floor(Math.sqrt( NUM_INSTANCES ));
+        numColumns = numRows;
+
+        for (var instance = 0; instance < NUM_INSTANCES; instance++ )
+        {
+
+            var translateX = ( Math.floor( instance % numRows ) / numRows ) * 2.0 - 1.0;
+            var translateY = ( Math.floor( instance / numColumns ) / numColumns ) * 2.0 - 1.0;
+
+            // Generate a model view matrix to rotate/translate the cube
+            var modelview = mat4.create(); // create identity
+
+            // Per-instance translation
+            mat4.translate(modelview, modelview, [translateX, translateY, -2.0]);
+
+            // Compute a rotation angle based on time to rotate the cube
+            userData.angle[instance] += ( deltaTime * 40.0 );
+
+            if ( userData.angle[instance] >= 360.0 )
+            {
+                userData.angle[instance] -= 360.0;
+            }
+
+            // Rotate the cube
+            mat4.rotate(modelview, modelview, glMatrix.toRadian(userData.angle[instance]), [0.7071, 0.0, 0.7071]);
+
+            // Compute the final MVP by multiplying the
+            // modevleiw and perspective matrices together
+            mat4.mul(userData.matrixBuf.subarray(16*instance), perspective, modelview);
+        }
+        gl.bufferData ( gl.ARRAY_BUFFER, userData.matrixBuf, gl.DYNAMIC_DRAW );
+        draw();
+        window.requestAnimationFrame(update);
+    }
+
+    function draw() {
+        var userData = gl.userData;
+        // Set the viewport
+        gl.viewport ( 0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight );
+
+        // Clear the color buffer
+        gl.clear ( gl.COLOR_BUFFER_BIT| gl.DEPTH_BUFFER_BIT );
+
+        // Use the program object
+        gl.useProgram ( userData.programObject );
+
+        // Load the vertex position
+        gl.bindBuffer ( gl.ARRAY_BUFFER, userData.positionVBO );
+        gl.vertexAttribPointer ( POSITION_LOC, 3, gl.FLOAT,
+            false, 3 * Float32Array.BYTES_PER_ELEMENT, 0 );
+        gl.enableVertexAttribArray ( POSITION_LOC );
+
+        // Load the instance color buffer
+        gl.bindBuffer ( gl.ARRAY_BUFFER, userData.colorVBO );
+        gl.vertexAttribPointer ( COLOR_LOC, 4, gl.FLOAT,
+            false, 4 * Float32Array.BYTES_PER_ELEMENT, 0);
+        gl.enableVertexAttribArray ( COLOR_LOC );
+        gl.vertexAttribDivisor ( COLOR_LOC, 1 ); // One color per instance
+
+
+        // Load the instance MVP buffer
+        gl.bindBuffer ( gl.ARRAY_BUFFER, userData.mvpVBO );
+
+        // Load each matrix row of the MVP.  Each row gets an increasing attribute location.
+        gl.vertexAttribPointer ( MVP_LOC + 0, 4, gl.FLOAT, false, 16*Float32Array.BYTES_PER_ELEMENT, 0);
+        gl.vertexAttribPointer ( MVP_LOC + 1, 4, gl.FLOAT, false, 16*Float32Array.BYTES_PER_ELEMENT, ( Float32Array.BYTES_PER_ELEMENT * 4 ) );
+        gl.vertexAttribPointer ( MVP_LOC + 2, 4, gl.FLOAT, false, 16*Float32Array.BYTES_PER_ELEMENT, ( Float32Array.BYTES_PER_ELEMENT * 8 ) );
+        gl.vertexAttribPointer ( MVP_LOC + 3, 4, gl.FLOAT, false, 16*Float32Array.BYTES_PER_ELEMENT, ( Float32Array.BYTES_PER_ELEMENT * 12 ) );
+        gl.enableVertexAttribArray ( MVP_LOC + 0 );
+        gl.enableVertexAttribArray ( MVP_LOC + 1 );
+        gl.enableVertexAttribArray ( MVP_LOC + 2 );
+        gl.enableVertexAttribArray ( MVP_LOC + 3 );
+
+        // One MVP per instance
+        gl.vertexAttribDivisor ( MVP_LOC + 0, 1 );
+        gl.vertexAttribDivisor ( MVP_LOC + 1, 1 );
+        gl.vertexAttribDivisor ( MVP_LOC + 2, 1 );
+        gl.vertexAttribDivisor ( MVP_LOC + 3, 1 );
+
+        // Bind the index buffer
+        gl.bindBuffer ( gl.ELEMENT_ARRAY_BUFFER, userData.indicesIBO );
+
+        // Draw the cubes
+        gl.drawElementsInstanced ( gl.TRIANGLES, userData.numIndices, gl.UNSIGNED_SHORT, 0, NUM_INSTANCES );
+    }
+
+    function esMain(){
+        // Create 'window'
+        var canvas = document.getElementById('webgl_canvas');
+        // Try creating a WebGL 2 context first
+        gl = canvas.getContext( 'webgl2', { antialias: false } );
+        if (!gl) {
+            gl = canvas.getContext( 'experimental-webgl2', { antialias: false } );
+        }
+
+        gl.userData = {};
+
+        if ( !init ( ) )
+        {
+            return;
+        }
+        window.requestAnimationFrame(update);
+    }
+    window.onload = esMain;
+</script>
+</body>
+</html>
